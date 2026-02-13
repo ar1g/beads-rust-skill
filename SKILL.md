@@ -15,27 +15,49 @@ metadata:
 
 ## Prerequisites
 
-Before using this skill, verify that `br` is installed:
+**Step 1 — Detect `br`:**
+
+Always check for `br` before doing anything else:
 
 ```bash
-br --version || which br
+command -v br >/dev/null 2>&1
 ```
 
-If `br` is not found, surface the install instructions below to the user rather than failing silently.
+If the command succeeds, `br` is available — skip straight to the workflow sections below.
 
-**Quick install (recommended):**
+**Step 2 — If `br` is not found:**
+
+Tell the user:
+
+> `br` (beads_rust) is required but was not detected on this system.
+
+Then **offer** to install it via the recommended curl command. Ask clearly and wait for explicit approval — do **not** run the installer without consent.
+
+Recommended install command (run only after user approves):
 
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh?$(date +%s)" | bash
 ```
 
-**Via cargo:**
+After the install completes, verify success:
+
+```bash
+command -v br >/dev/null 2>&1
+```
+
+If verification fails, report the failure and stop.
+
+**Step 3 — If the user declines the install:**
+
+Show the manual alternatives below and stop — do not proceed without `br`.
+
+Manual install via cargo:
 
 ```bash
 cargo install --git https://github.com/Dicklesworthstone/beads_rust.git
 ```
 
-**From source:**
+Manual install from source:
 
 ```bash
 git clone https://github.com/Dicklesworthstone/beads_rust.git
