@@ -1,0 +1,7 @@
+interface:
+  display_name: "Beads Rust"
+  short_description: "Manage beads_rust issue workflows with br"
+  default_prompt: "Use beads-rust to triage, update, and close issues with br."
+
+policy:
+  allow_implicit_invocation: true
