@@ -4,6 +4,7 @@ description: Manage issues with the beads_rust CLI (`br`). Use when creating, tr
 license: MIT
 metadata:
   author: local
+  acknowledgements: Built on beads_rust by @Dicklesworthstone — https://github.com/Dicklesworthstone/beads_rust
   version: "1.0.0"
   domain: project-management
   triggers: br, beads, beads_rust, issue triage, backlog, dependencies
