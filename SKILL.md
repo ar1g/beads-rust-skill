@@ -1,16 +1,22 @@
 ---
 name: beads-rust
-description: Manage issues with the beads_rust CLI (`br`). Use when creating, triaging, updating, closing, prioritizing, or linking issues in a repository that uses `.beads`/`br` tracking.
+description: Manage issues with the beads_rust CLI (`br`). Use when creating, triaging, updating, closing, prioritizing, or linking issues in a repo that uses `.beads`.
 license: MIT
+version: "1.0.0"
+domain: project-management
+role: specialist
+scope: operations
+output-format: commands
+triggers:
+  - br
+  - beads
+  - beads_rust
+  - issue triage
+  - backlog
+  - dependencies
 metadata:
-  author: local
-  acknowledgements: Built on beads_rust by @Dicklesworthstone — https://github.com/Dicklesworthstone/beads_rust
-  version: "1.0.0"
-  domain: project-management
-  triggers: br, beads, beads_rust, issue triage, backlog, dependencies
-  role: specialist
-  scope: operations
-  output-format: commands
+  author: ar1g
+acknowledgements: "Built on beads_rust by @Dicklesworthstone"
 ---
 
 ## Prerequisites
