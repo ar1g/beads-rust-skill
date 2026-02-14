@@ -2,7 +2,6 @@
 name: beads-rust
 description: Manage issues with the beads_rust CLI (`br`). Use when creating, triaging, updating, closing, prioritizing, or linking issues in a repo that uses `.beads`.
 license: MIT
-version: "1.0.0"
 domain: project-management
 role: specialist
 scope: operations
