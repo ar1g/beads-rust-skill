@@ -21,7 +21,7 @@ storage, querying, and mutation logic lives in beads_rust itself.
 ## Why this exists
 
 This skill gives the agent
-a reliable playbook to use the lightweight rust port of Stve Yegge's beads issue tracker. 
+a reliable playbook to use the lightweight rust port of Steve Yegge's beads issue tracker. 
 
 ## Install and usage
 
