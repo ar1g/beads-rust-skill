@@ -16,6 +16,7 @@ triggers:
   - dependencies
 metadata:
   author: ar1g
+  version: 1.0.0
 acknowledgements: "Built on beads_rust by @Dicklesworthstone"
 ---
 
