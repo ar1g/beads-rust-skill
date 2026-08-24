@@ -1,268 +1,195 @@
 ---
 name: beads-rust
-description: Manage issues with the beads_rust CLI (`br`). Use when creating, triaging, updating, closing, prioritizing, or linking issues in a repository that uses `.beads`/`br` tracking.
+description: Manage local-first issues with the beads_rust CLI (`br`). Use when creating or triaging issues, finding ready work, claiming or updating work, managing dependencies, diagnosing blocked queues, or synchronizing a repository's `.beads` SQLite/JSONL state.
 license: MIT
 metadata:
   author: local
   acknowledgements: Built on beads_rust by @Dicklesworthstone — https://github.com/Dicklesworthstone/beads_rust
-  version: "1.0.0"
+  version: "1.1.0"
   domain: project-management
-  triggers: br, beads, beads_rust, issue triage, backlog, dependencies
+  triggers: br, beads, beads_rust, issue triage, backlog, dependencies, ready work
   role: specialist
   scope: operations
   output-format: commands
 ---
 
-## Prerequisites
+# Beads Rust
 
-**Step 1 — Detect `br`:**
+Use `br` for issue state in repositories that contain a `.beads` workspace. `br` is local-first: SQLite is the primary store and JSONL is the Git-friendly export.
 
-Always check for `br` before doing anything else:
+## Prerequisite
+
+Check before using the workflow:
 
 ```bash
-command -v br >/dev/null 2>&1
+command -v br >/dev/null 2>&1 && br version
 ```
 
-If the command succeeds, `br` is available — skip straight to the workflow sections below.
-
-**Step 2 — If `br` is not found:**
-
-Tell the user:
-
-> `br` (beads_rust) is required but was not detected on this system.
-
-Then **offer** to install it via the recommended curl command. Ask clearly and wait for explicit approval — do **not** run the installer without consent.
-
-Recommended install command (run only after user approves):
+If `br` is missing, tell the user and request approval before running the recommended installer:
 
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh?$(date +%s)" | bash
 ```
 
-After the install completes, verify success:
+Do not infer permission to pipe a downloaded script into a shell. If the user prefers a manual installation, offer:
 
 ```bash
-command -v br >/dev/null 2>&1
+cargo install --git https://github.com/Dicklesworthstone/beads_rust.git beads_rust --locked
 ```
 
-If verification fails, report the failure and stop.
+Building from source requires the repository's pinned Rust nightly toolchain. Verify the installed binary with `which br` and `br version`; multiple installs can leave an old binary earlier in `PATH`.
 
-**Step 3 — If the user declines the install:**
+## Operating Rules
 
-Show the manual alternatives below and stop — do not proceed without `br`.
+1. Use `br`, never the older `bd` command.
+2. Discover the workspace with `br where --json` and inspect targeted issues before mutating them.
+3. Prefer `--json` for agent parsing. Use `--format toon` when reduced token usage materially helps.
+4. Resolve the mutation actor at runtime and pass `--actor`:
 
-Manual install via cargo:
+   ```bash
+   ACTOR="${BR_ACTOR:-assistant}"
+   ```
+
+5. Pass explicit issue IDs. Some commands can fall back to the last-touched issue, which is unsafe in automation.
+6. Keep mutations scoped to the request and read back the resulting state.
+7. Successful mutations auto-flush `.beads/issues.jsonl` by default. `br sync --flush-only` is an idempotent final export check, and is necessary after `--no-auto-flush`, related configuration, or recovery work.
+8. `br` does not commit, push, pull, or install Git hooks. Do not perform Git handoff unless the user requested it.
+9. Most issue operations stay inside `.beads`, but explicit commands such as `br agents`, `br config edit/set`, `br completions -o`, `br doctor --repair`, and `br upgrade` can write elsewhere or update the binary. Treat those side effects according to the user's request.
+
+For routine commands, prefix `RUST_LOG=error` if dependency logs would pollute structured output.
+
+## Discover the Current Command Contract
+
+The CLI is authoritative when installed behavior may differ from this skill:
 
 ```bash
-cargo install --git https://github.com/Dicklesworthstone/beads_rust.git
+br capabilities --format json
+br capabilities --format json --command update
+br robot-docs guide
+br schema commands --format json
 ```
 
-Manual install from source:
+Use `br <command> --help` for flags not covered here. Do not guess a renamed flag or output shape.
+
+## Verify the Workspace
+
+Before a mutation batch, capture only the context needed for the task:
 
 ```bash
-git clone https://github.com/Dicklesworthstone/beads_rust.git
-cd beads_rust
-cargo build --release
-cargo install --path .
-```
-
-# Beads Rust
-
-Use `br` as the source of truth for issue state. Prefer machine-readable output (`--json`) for
-analysis and deterministic updates.
-
-Use this skill when the request involves issue operations in a repo that uses `.beads`, including:
-- creating issues
-- triaging backlog
-- updating priority/status/labels/parent
-- linking or removing dependencies
-- closing/reopening with evidence
-- summarizing ready/blocked queue impact
-
-## Core Rules
-
-1. Read first, mutate second. Use `br show <id> --json` to inspect before updating.
-2. Prefer `--json` whenever available.
-3. Resolve actor at runtime and pass it via `--actor`; do not ask the user to edit files.
-4. Keep changes minimal and scoped to requested issues.
-5. Recompute queues after bulk changes.
-6. Make closure reasons concrete and auditable.
-7. `--format toon` is a token-optimized alternative to `--json` for context-window-sensitive agents. Use `--json` as the safer default.
-
-## Actor Resolution
-
-The agent should choose actor automatically for each mutation batch:
-- if `BR_ACTOR` is set, use it
-- otherwise use a stable assistant identity (for example model/agent name)
-- fallback to `assistant`
-
-Example runtime setup (agent-executed, not user-edited):
-
-```bash
-ACTOR="${BR_ACTOR:-assistant}"
-```
-
-Use `"$ACTOR"` in mutating commands.
-
-## Verify Workspace
-
-Before any update:
-
-```bash
-br where
+br where --json
 br ready --json
 br blocked --json
 br list --status open --sort priority --json
 ```
 
-If workspace context is wrong or unclear, stop before mutating.
+Stop before mutating if workspace discovery is wrong or ambiguous. `br sync --status --json` checks DB/JSONL sync state without inspecting Git; use `br vcs-status --json` only when explicit Git visibility is relevant.
 
 ## Standard Workflow
 
-For triage batches:
-1. Capture baseline (`ready`, `blocked`, `open list`).
-2. Classify each targeted issue.
-3. Apply scoped updates.
-4. Recompute queues.
-5. Report IDs changed and queue deltas.
+For one issue:
 
-For single-issue tasks:
-1. Verify workspace.
-2. Inspect the issue: `br show <id> --json`.
-3. Apply requested mutation.
-4. Read back state (`--json`) to confirm.
-5. Report exact change and rationale.
+1. Run `br show <id> --json`.
+2. Apply the smallest requested mutation with `--actor "$ACTOR"` and `--json`.
+3. Run `br show <id> --json` again.
+4. Recheck `ready` or `blocked` when status or dependencies changed.
+5. Report the exact mutation and verification result.
 
-## Triage Decision Matrix
-
-Use one classification per issue:
-
-- `implemented`
-  - close with implementation evidence (commit/PR/file/observable behavior)
-- `out-of-scope`
-  - close with explicit boundary reason
-- `needs-clarification`
-  - comment with specific unanswered questions
-- `actionable`
-  - keep open and correct status/priority/labels/dependencies
-
-During large triage efforts, checkpoint every few updates:
-
-```bash
-br ready --json
-br blocked --json
-```
-
-## Create High-Quality Issues
-
-Bug issues should include:
-- concise summary
-- reproduction steps
-- expected vs actual
-- environment/context
-- logs or crash pointers
-
-Task/feature issues should include:
-- objective
-- acceptance criteria
-- constraints and non-goals
-- dependencies or parent linkage
-
-For rapid capture when only a title is needed, use `br q "<title>"` to get an ID quickly.
-
-Reference command templates:
-- `references/command-cookbook.md`
-
-## Update Patterns
-
-Use small idempotent mutations:
+Claim work atomically:
 
 ```bash
 ACTOR="${BR_ACTOR:-assistant}"
-br update --actor "$ACTOR" <id> --priority 2 --status in_progress --json
-br update --actor "$ACTOR" <id> --add-label reliability --json
-br update --actor "$ACTOR" <id> --parent <parent-id> --json
-br comments add --actor "$ACTOR" <id> --message "<triage note / evidence>" --json
+br update --actor "$ACTOR" <id> --claim --json
 ```
 
-Multiple IDs can be passed to `br update` for batch triage:
+`--claim` assigns the actor and moves the issue to `in_progress`; it refuses blocked work unless `--force` is explicitly justified. Repositories may define custom statuses, transition comments, required acceptance criteria, gates, or capacity limits in `.beads/policy.yaml`. Follow the policy error evidence rather than bypassing it. When required, bind a fresh comment to the transition with `--transition-comment`.
 
-```bash
-br update --actor "$ACTOR" <id1> <id2> <id3> --priority 2 --add-label triage-reviewed --json
-```
+Multi-target lifecycle commands are atomic within one repository. Routed operations spanning repositories use independent transactions, so do not report cross-repository atomicity.
 
-Prefer comment-first when facts are incomplete.
+## Triage
 
-## Dependency Hygiene
+Classify each targeted issue once:
 
-Use explicit dependencies to keep ready/blocked accurate.
+- `implemented`: close with commit, PR, path, or verified behavior as evidence.
+- `out-of-scope`: close with a concrete boundary reason.
+- `needs-clarification`: add a comment containing the unanswered question.
+- `actionable`: keep open and correct only its status, priority, labels, parent, or dependencies.
 
-Rules:
-- add `blocks` only for real execution ordering constraints
-- remove stale dependency links promptly
-- verify dependency effects after changes
+For a large batch, inspect each issue, apply small batches, then recompute `ready`, `blocked`, and the open list. Do not modify unrelated issues or invent closure evidence.
 
-Commands:
+## Create Issues
 
-```bash
-br dep add <issue-id> <depends-on-id> --type blocks
-br dep rm <issue-id> <depends-on-id>
-br dep list <issue-id> --json
-br blocked --json
-```
-
-## Closure Standard
-
-Before closing an issue:
-1. provide evidence artifact (commit/PR/path/observed behavior)
-2. state what was verified
-3. use precise `--reason`
-
-Close/reopen patterns:
+Bug descriptions should include reproduction, expected and actual behavior, environment, and log/crash pointers. Tasks and features should include objective, acceptance criteria, constraints, non-goals, and known dependencies.
 
 ```bash
 ACTOR="${BR_ACTOR:-assistant}"
-br close --actor "$ACTOR" <id> --reason "<specific reason with evidence>" --json
-br reopen --actor "$ACTOR" <id> --reason "<reason for reopening>" --json
+br create --actor "$ACTOR" "<title>" --type bug --priority 1 \
+  --description "<repro, expected/actual, environment, evidence>" --json
 ```
 
-If confidence is low, add clarification comments instead of closing.
+Use `--description-file <path>` for multi-paragraph Markdown that would be fragile to shell-quote. Use `br q --actor "$ACTOR" "<title>"` only for intentionally minimal capture.
 
-For milestone issues, summarize unmet criteria in a comment before closure decisions.
+## Dependencies
 
-## Reporting Format
+`br dep add <issue> <depends-on>` means the first issue is blocked by the second:
 
-When reporting work, include:
-1. changed issue IDs and exact mutations
-2. reason for each meaningful change
-3. queue impact (`ready`, `blocked`)
-4. explicit follow-ups needed
-
-Preferred response shape:
-
-```text
-Updated:
-- <id>: <change>
-
-Closed:
-- <id>: <reason + evidence>
-
-Queue impact:
-- ready: <summary>
-- blocked: <summary>
-
-Needs input:
-- <id>: <question>
+```bash
+br dep add <issue-id> <depends-on-id> --type blocks --json
+br dep remove <issue-id> <depends-on-id> --json
+br dep list <issue-id> --direction both --format json
+br dep cycles --blocking-only --json
+br blocked --json
 ```
 
-## Safety Guardrails
+Add `blocks` only for genuine execution ordering. Check both issues first, verify queue impact afterward, and keep the blocking graph cycle-free.
 
-- Do not modify unrelated issues.
-- Do not invent evidence for closure.
-- Do not add speculative dependencies.
-- Re-run reads with `--json` when output is ambiguous.
-- Prefer reversible updates over broad, risky edits.
+## Close, Reopen, Defer, and Delete
 
-## Quick Command Reference
+Use dedicated lifecycle commands rather than `br update --status closed`:
 
-Use `references/command-cookbook.md` for concise copy/paste command patterns.
+```bash
+ACTOR="${BR_ACTOR:-assistant}"
+br close --actor "$ACTOR" <id> --reason "<specific evidence>" --json
+br reopen --actor "$ACTOR" <id> --reason "<why work resumed>" --json
+br defer --actor "$ACTOR" <id> --until <date> --json
+br undefer --actor "$ACTOR" <id> --json
+```
+
+If closure confidence is low, comment instead. `br delete` creates a tombstone and is not a substitute for closing completed or rejected work; use it only when deletion was specifically intended.
+
+## Diagnose Hidden Work
+
+If `br ready --json` is unexpectedly empty, inspect rather than reclaiming automatically:
+
+```bash
+br coordination status --json
+br blocked --json
+br dep cycles --blocking-only --json
+```
+
+`coordination status` is read-only. Stale claim evidence may justify a later user-scoped update, but it does not authorize automatic reclamation.
+
+## Sync and Recovery
+
+Never run bare `br sync`; choose an explicit direction or diagnostic mode. Ordinary mutations already auto-flush JSONL, so use:
+
+```bash
+br sync --status --json       # read-only DB/JSONL status
+br sync --flush-only          # DB -> JSONL final export check
+br sync --import-only         # JSONL -> DB after external JSONL changes
+br sync --merge               # three-way merge divergent DB and JSONL state
+```
+
+Preview recovery operations and review their evidence before applying them. Do not use `--force`, `--force-db`, `--force-jsonl`, or `--rebuild` without establishing which state is authoritative and confirming that the resulting overwrite is within scope.
+
+See [references/command-cookbook.md](references/command-cookbook.md) for conditional command patterns, recovery modes, and diagnostics.
+
+## Report Results
+
+Include:
+
+- changed issue IDs and exact mutations;
+- reasons and evidence for meaningful changes;
+- verification performed and any `ready`/`blocked` impact;
+- policy, coordination, sync, or user-input follow-ups still needed.
+
+Do not claim that issue changes were committed or pushed unless those separate Git operations were requested and verified.
